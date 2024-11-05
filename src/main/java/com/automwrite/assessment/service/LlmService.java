@@ -1,14 +1,17 @@
 package com.automwrite.assessment.service;
 
 import java.util.concurrent.CompletableFuture;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
 
 public interface LlmService {
 
-    String generateText(String prompt);
+    DocumentStyle extractDocumentTone(XWPFDocument toneFile);
 
-    String extractDocumentTone(String document);
+    String updateDocumentTone(XWPFDocument document, DocumentStyle documentStyle, String originalFilename);
 
-    String getUpdatedTone(String  document, DocumentStyle documentStyle);
+    CompletableFuture<DocumentStyle>  extractDocumentToneAsync(XWPFDocument contentDocument);
 
-    CompletableFuture<String> generateTextAsync(String prompt);
+    CompletableFuture<String> updateDocumentToneAsync(XWPFDocument document, DocumentStyle documentStyle,
+        String originalFilename);
+
 }

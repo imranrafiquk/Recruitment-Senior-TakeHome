@@ -1,5 +1,8 @@
 package com.automwrite.assessment.service;
 
+import lombok.Getter;
+
+@Getter
 public enum DocumentStyle {
   CASUAL("Casual"), FORMAL("Formal"), GRANDILOQUENT("Grandiloquent"), UNKNOWN("Unknown");
 
@@ -24,8 +27,5 @@ public enum DocumentStyle {
 
   }
 
-  public String getStyleText() {
-    return styleText;
-  }
 
 }

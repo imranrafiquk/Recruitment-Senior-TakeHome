@@ -1,5 +1,6 @@
 package com.automwrite.assessment.service.impl;
 
+import com.automwrite.assessment.exception.DocumentParsingException;
 import com.automwrite.assessment.service.DocumentService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -63,7 +64,7 @@ public class DocumentServiceImpl implements DocumentService {
   }
 
   @Override
-  public String getDocumentContentAsJson(XWPFDocument document) throws JsonProcessingException {
+  public String getDocumentContentAsJson(XWPFDocument document)  {
 
     List<Object> contentList = new ArrayList<>();
 
@@ -102,7 +103,11 @@ public class DocumentServiceImpl implements DocumentService {
 
     // Convert to JSON
     ObjectMapper objectMapper = new ObjectMapper();
-    return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(jsonMap);
+    try {
+      return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(jsonMap);
+    } catch (JsonProcessingException e) {
+      throw new DocumentParsingException(e);
+    }
 
 
   }

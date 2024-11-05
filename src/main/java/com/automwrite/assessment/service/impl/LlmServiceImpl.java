@@ -1,17 +1,12 @@
 package com.automwrite.assessment.service.impl;
 
+import com.automwrite.assessment.service.DocumentService;
 import com.automwrite.assessment.service.DocumentStyle;
 import com.automwrite.assessment.service.LlmService;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
+import com.automwrite.assessment.utils.DocumentUtils;
+import com.automwrite.assessment.utils.ResponseUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
-import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -30,48 +25,22 @@ public class LlmServiceImpl implements LlmService {
   private static final String ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 
   private final RestTemplate restTemplate;
-  private final ObjectMapper objectMapper;
   private final String apiKey;
+  private final DocumentService documentService;
 
-  public LlmServiceImpl(RestTemplate restTemplate, ObjectMapper objectMapper,
-      @Value("${anthropic.api.key}") String apiKey) {
+  public LlmServiceImpl(RestTemplate restTemplate,
+      @Value("${anthropic.api.key}") String apiKey, DocumentService documentService) {
     this.restTemplate = restTemplate;
-    this.objectMapper = objectMapper;
     this.apiKey = apiKey;
+    this.documentService = documentService;
   }
 
   @Override
-  public String generateText(String prompt) {
-    try {
-      HttpHeaders headers = new HttpHeaders();
-      headers.setContentType(MediaType.APPLICATION_JSON);
-      headers.set("x-api-key", apiKey);
-      headers.set("anthropic-version", "2023-06-01");
+  public DocumentStyle extractDocumentTone(XWPFDocument toneFile) {
 
-      Map<String, Object> requestBody = Map.of("model", "claude-3-5-sonnet-20241022", "max_tokens",
-          1024,  // Claude supports up to 8192 output tokens
-          "messages", new Object[]{Map.of("role", "user", "content", prompt)});
+    String plainTextToneDocument = documentService.getDocumentContentAsText(toneFile);
 
-      var response = restTemplate.postForObject(ANTHROPIC_API_URL,
-          new HttpEntity<>(requestBody, headers), Map.class);
 
-      if (response != null && response.containsKey("content")) {
-        List<Map<String, Object>> content = (List<Map<String, Object>>) response.get("content");
-        if (!content.isEmpty()) {
-          return (String) content.get(0).get("text");
-        }
-      }
-
-      log.error("Unexpected response format: {}", response);
-      return "";
-    } catch (Exception e) {
-      log.error("Error generating text", e);
-      return "";
-    }
-  }
-
-  @Override
-  public String extractDocumentTone(String document) {
     try {
       HttpHeaders headers = new HttpHeaders();
       headers.setContentType(MediaType.APPLICATION_JSON);
@@ -82,7 +51,7 @@ public class LlmServiceImpl implements LlmService {
           1024,  // Claude supports up to 8192 output tokens
           "system",
           "Extract the tone of the supplied document as one of the following categories, Casual, Formal or Grandiloquent",
-          "messages", new Object[]{Map.of("role", "user", "content", document)});
+          "messages", new Object[]{Map.of("role", "user", "content", plainTextToneDocument)});
 
       var response = restTemplate.postForObject(ANTHROPIC_API_URL,
           new HttpEntity<>(requestBody, headers), Map.class);
@@ -90,22 +59,22 @@ public class LlmServiceImpl implements LlmService {
       if (response != null && response.containsKey("content")) {
         List<Map<String, Object>> content = (List<Map<String, Object>>) response.get("content");
         if (!content.isEmpty()) {
-          return (String) content.get(0).get("text");
+          return DocumentStyle.getFromResponse(((String) content.get(0).get("text")));
         }
       }
 
       log.error("Unexpected response format: {}", response);
-      return "";
+      return DocumentStyle.UNKNOWN;
     } catch (Exception e) {
       log.error("Error generating text", e);
-      return "";
+      return DocumentStyle.UNKNOWN;
     }
   }
 
 
   @Override
-  public String getUpdatedTone(String document, DocumentStyle documentStyle) {
-
+  public String updateDocumentTone(XWPFDocument contentDocument, DocumentStyle documentStyle, String originalFilename) {
+    String document = documentService.getDocumentContentAsJson(contentDocument);
     try {
       HttpHeaders headers = new HttpHeaders();
       headers.setContentType(MediaType.APPLICATION_JSON);
@@ -125,8 +94,13 @@ public class LlmServiceImpl implements LlmService {
       if (response != null && response.containsKey("content")) {
         List<Map<String, Object>> content = (List<Map<String, Object>>) response.get("content");
         if (!content.isEmpty()) {
-          return (String) content.get(0).get("text");
+          String responseContent = (String) content.get(0).get("text");
+          documentService.updateDocumentToneAndSaveCopy(contentDocument,
+              ResponseUtils.parseMappings(responseContent),
+              DocumentUtils.appendToneToFileName(originalFilename, documentStyle));
         }
+        return "File successfully uploaded, processing completed";
+
       }
 
       log.error("Unexpected response format: {}", response);
@@ -136,11 +110,18 @@ public class LlmServiceImpl implements LlmService {
       return "";
     }
 
+
   }
 
   @Override
-  public CompletableFuture<String> generateTextAsync(String prompt) {
-    return CompletableFuture.supplyAsync(() -> generateText(prompt));
+  public CompletableFuture<DocumentStyle> extractDocumentToneAsync(XWPFDocument toneFile) {
+    return CompletableFuture.supplyAsync(() -> extractDocumentTone(toneFile));
+  }
+
+  @Override
+  public CompletableFuture<String> updateDocumentToneAsync(XWPFDocument document,
+      DocumentStyle documentStyle, String originalFilename) {
+    return CompletableFuture.supplyAsync(() -> this.updateDocumentTone(document, documentStyle, originalFilename));
   }
 
 }

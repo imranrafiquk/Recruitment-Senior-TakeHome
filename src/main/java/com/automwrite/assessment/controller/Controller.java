@@ -1,10 +1,7 @@
 package com.automwrite.assessment.controller;
 
-import com.automwrite.assessment.service.DocumentService;
-import com.automwrite.assessment.service.DocumentStyle;
 import com.automwrite.assessment.service.LlmService;
-import com.automwrite.assessment.utils.DocumentUtils;
-import com.automwrite.assessment.utils.ResponseUtils;
+import java.util.concurrent.CompletableFuture;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -25,7 +22,6 @@ import java.io.IOException;
 public class Controller {
 
   private final LlmService llmService;
-  private final DocumentService documentService;
 
   /**
    * You should extract the tone from the `toneFile` and update the `contentFile` to convey the same
@@ -36,29 +32,19 @@ public class Controller {
    * @return A response indicating that the processing has completed
    */
   @PostMapping("/transfer-style")
-  public ResponseEntity<String> test(@RequestParam MultipartFile toneFile,
+  public CompletableFuture<ResponseEntity<String>> test(@RequestParam MultipartFile toneFile,
       @RequestParam MultipartFile contentFile) throws IOException {
 
+    XWPFDocument toneDocument = new XWPFDocument(toneFile.getInputStream());
     XWPFDocument contentDocument = new XWPFDocument(contentFile.getInputStream());
 
-    String plainTextToneDocument = documentService.getDocumentContentAsText(
-        new XWPFDocument(toneFile.getInputStream()));
-    String response = llmService.extractDocumentTone(plainTextToneDocument);
+    return llmService.extractDocumentToneAsync(toneDocument).thenCompose(
+        toneResponse -> llmService.updateDocumentToneAsync(contentDocument, toneResponse,
+            contentFile.getOriginalFilename())).thenApply(ResponseEntity::ok).exceptionally(ex -> {
+      return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+          .body("Error processing document: " + ex.getMessage());
+    });
 
 
-    DocumentStyle documentStyle = DocumentStyle.getFromResponse(response);
-    if (documentStyle.equals(DocumentStyle.UNKNOWN)) {
-      return ResponseEntity.status(HttpStatus.NO_CONTENT)
-          .body("Cannot determine style from contentDocument");
-    }
-
-    String plainTextContentDocument = documentService.getDocumentContentAsJson(contentDocument);
-    String updatedToneResponse = llmService.getUpdatedTone(plainTextContentDocument, documentStyle);
-
-    documentService.updateDocumentToneAndSaveCopy(contentDocument,
-        ResponseUtils.parseMappings(updatedToneResponse), DocumentUtils.appendToneToFileName(contentFile.getOriginalFilename(), documentStyle));
-
-    // Simple response to indicate that everything completed
-    return ResponseEntity.ok("File successfully uploaded, processing completed");
   }
 }

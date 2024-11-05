@@ -1,6 +1,5 @@
 package com.automwrite.assessment.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import java.io.IOException;
 import java.util.Map;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
@@ -11,7 +10,7 @@ public interface DocumentService {
 
   String getDocumentContentAsTextIncludingTables(XWPFDocument document);
 
-  String getDocumentContentAsJson(XWPFDocument document) throws JsonProcessingException;
+  String getDocumentContentAsJson(XWPFDocument document);
 
   void updateDocumentToneAndSaveCopy(XWPFDocument document, Map<String, String> toneUpdateMapping,
       String outputFileName)
